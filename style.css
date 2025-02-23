@@ -310,3 +310,80 @@ input[type="reset"]:hover {
 .contact-info a:hover {
     text-decoration: underline;
 }
+/* Responsive design */
+@media (max-width: 1024px) {
+    nav {
+        width: 200px;
+    }
+    .main-container {
+        margin-left: 200px;
+    }
+}
+
+@media (max-width: 768px) {
+    header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .page-content {
+        flex-direction: column;
+    }
+    
+    nav {
+        width: 100%;
+        height: auto;
+        position: static;
+        box-shadow: none;
+    }
+    
+    nav ul {
+        display: flex;
+        flex-wrap: wrap;
+        padding: 0;
+    }
+    
+    nav li {
+        flex: 1 0 33%;
+        text-align: center;
+        padding: 10px 5px;
+        font-size: 14px;
+        border-left: none;
+        border-bottom: 3px solid transparent;
+    }
+    
+    nav li:hover, nav a.active li {
+        border-left: none;
+        border-bottom: 3px solid #6a5acd;
+    }
+    
+    .main-container {
+        margin-left: 0;
+        padding: 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    header {
+        height: 60px;
+    }
+    
+    header h1 {
+        font-size: 1.2rem;
+    }
+    
+    .page-content {
+        margin-top: 60px;
+    }
+    
+    nav li {
+        flex: 1 0 50%;
+    }
+    
+    .main-container {
+        padding: 15px;
+    }
+    
+    .page-title {
+        font-size: 1.5rem;
+    }
+}
