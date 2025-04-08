@@ -71,4 +71,3 @@ function validateEmail(email) {
 
     return false; //valid
 }
-
