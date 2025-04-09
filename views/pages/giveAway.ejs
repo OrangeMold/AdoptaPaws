@@ -20,13 +20,14 @@
                 <li><a href="/cat-care">Cat Care</a></li>
                 <li><a href="/give-away">Have a Pet to Give Away</a></li>
                 <li><a href="/contact">Contact Us</a></li>
+                <li><a href="/logout">Logout</a></li>
             </ul>
             
         </nav>
         
         <div class="main-container" id="forum-page">
             <h1 class="forum-title">Give Away a Pet</h1>
-            <form id="giveAwayForm">
+            <form id="giveAwayForm" action="/submit-pet" method="POST">
                 <label for="pet-type">Pet Type:</label>
                 <select id="pet-type" name="pet-type">
                     <option value="cat">Cat</option>
@@ -80,10 +81,9 @@
                 <label for="owner-email">Current Owner's Email:</label>
                 <input type="email" id="owner-email" name="owner-email"><br><br>
     
-                <input type="submit" value="Submit" name="submit" id="submit-button">
+                <input type="submit" value="Submit" name="submitAction" id="submit-button">
                 <input type="reset" value="Reset" name="reset" id="reset-button">
             </form>
-            <button id="logoutBtn">Logout</button>
         </div>
     </div>
 
