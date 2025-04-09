@@ -1,12 +1,11 @@
 document.getElementById("findForm").addEventListener("submit", function (event) {
-    event.preventDefault();
-        
+    event.preventDefault(); 
+
     let isValid = true;
     let errorMessage = "";
-        
+
     const petTypeRadios = document.getElementsByName("type");
     let petType = "";
-
     for (let radio of petTypeRadios) {
         if (radio.checked) {
             petType = radio.value;
@@ -14,30 +13,36 @@ document.getElementById("findForm").addEventListener("submit", function (event) 
         }
     }
 
-    if (!petType) {
-        errorMessage += "Select  pet type\n";
-        isValid = false;
-    }
-
-    const friendlyOpts = document.getElementsByName("friendly[]");
-    let isFriendlySelected = false;
-
-    for (let checkbox of friendlyOpts) {
-        if (checkbox.checked) {
-            isFriendlySelected = true;
-            break; 
-        }
-    }
-
-    if (!isFriendlySelected) {
-        errorMessage += "Select at least one option for what your pet is friendly with\n";
-        isValid = false;
-    
-    }
-
     if (!isValid) {
-        alert(errorMessage); 
+        alert(errorMessage);
     } else {
-        this.submit();
+        const formData = new FormData(this); 
+        const params = new URLSearchParams();
+
+        //Add values to paramatrs if they exist or not no pref
+        if (formData.get('type')) {
+            params.append('type', formData.get('type'));
+        }
+        if (formData.get('breed')?.trim()) { //only add breed if empty
+            params.append('breed', formData.get('breed').trim());
+        }
+        if (formData.get('age') && formData.get('age') !== 'No Preference') {
+            params.append('age', formData.get('age'));
+        }
+        if (formData.get('gender') && formData.get('gender') !== 'No Preference') {
+            params.append('gender', formData.get('gender'));
+        }
+
+        const friendlyValues = formData.getAll('friendly[]');
+        friendlyValues.forEach(value => {
+            params.append('friendly', value);
+        });
+
+        //redirect to browse w/ params
+        window.location.href = `/browse?${params.toString()}`;
     }
+});
+
+document.getElementById("reset-button")?.addEventListener("click", function() {
+    document.getElementById("findForm").reset(); 
 });

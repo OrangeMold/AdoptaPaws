@@ -3,134 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
-    <link rel="stylesheet" href="/css/style.css">
-    <style>
-        body { font-family: sans-serif; padding: 20px; }
-        /* Combined error message style */
-        .error-message { color: red; margin-bottom: 15px; font-weight: bold; }
-        label { display: block; margin-bottom: 5px; }
-        input[type="text"], input[type="password"] {
-            width: 100%;
-            padding: 8px;
-            margin-bottom: 10px; /* Adjusted margin */
-            box-sizing: border-box;
-        }
-         small { display: block; margin-bottom: 10px; color: #555; font-size: 0.85em;}
-        button { padding: 10px 15px; cursor: pointer; margin-top: 10px; }
-        .form-container { max-width: 400px; margin: auto; }
-    </style>
+    <title>AdoptaPaws - Login</title>
+    <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-
-<div class="form-container">
-    <h1>Login</h1>
-
-     <% if (typeof error !== 'undefined' && error) { %>
-        <p class="error-message server-error"><%= error %></p>
-    <% } %>
-
-    <div id="clientErrorMessage" class="error-message"></div>
-
-    <form id="loginForm" action="/login" method="POST">
-        <div>
-            <label for="username">Username:</label>
-            <input type="text" id="username" name="username" required>
-             <small>Must contain only letters (a-z, A-Z) and digits (0-9).</small>
+    <%- include('../partials/header') %>
+    
+    <div class="page-content">
+        <nav>
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/browse">Browse Available Pets</a></li>
+                <li><a href="/find">Find a Dog/Cat</a></li>
+                <li><a href="/dog-care">Dog Care</a></li>
+                <li><a href="/cat-care">Cat Care</a></li>
+                <li><a href="/give-away">Have a Pet to Give Away</a></li>
+                <li><a href="/contact">Contact Us</a></li>
+                <li><a href="/create-account">Create Account</a></li>
+                <% if (typeof username !== 'undefined' && username) { %>
+                    <li><a href="/logout">Logout (<%= username %>)</a></li>
+                <% } else { %>
+                    <li><a href="/login">Login</a></li>
+                <% } %>
+            </ul>
+        </nav>
+        
+        <div class="main-container">
+            <h1 class="page-title">Login</h1>
+            
+            <form id="loginForm" action="/login" method="POST" class="contact-info">
+                <% if (typeof error !== 'undefined' && error) { %>
+                    <p class="error-message server-error"><%= error %></p>
+                <% } %>
+                
+                <div id="clientErrorMessage" class="error-message"></div>
+                
+                <div class="contact-section">
+                    <div>
+                        <label for="username">Username:</label>
+                        <input type="text" id="username" name="username" required>
+                        <small>Must contain only letters (a-z, A-Z) and digits (0-9).</small>
+                    </div>
+                    <div>
+                        <label for="password">Password:</label>
+                        <input type="text" id="password" name="password" required>
+                        <small>Minimum 4 characters, letters and digits only, at least one letter and one digit.</small>
+                    </div>
+                    <div>
+                        <input type="submit" value="Login">
+                    </div>
+                </div>
+                
+                <p class="intro-text">Don't have an account? <a href="/create-account">Create one here</a>.</p>
+            </form>
         </div>
-        <div>
-            <label for="password">Password:</label>
-            <input type="password" id="password" name="password" required>
-            <small>Minimum 4 characters, letters and digits only, at least one letter and one digit.</small>
-        </div>
-        <div>
-            <button type="submit">Login</button>
-        </div>
-    </form>
+    </div>
 
-    <p>Don't have an account? <a href="/create-account">Create one here</a>.</p>
-</div>
-
-<script>
-    // Get references to the form elements
-    const loginForm = document.getElementById('loginForm');
-    const usernameInput = document.getElementById('username');
-    const passwordInput = document.getElementById('password');
-    const clientErrorMessageDiv = document.getElementById('clientErrorMessage');
-
-    // Add event listener for form submission
-    loginForm.addEventListener('submit', function(event) {
-        // Prevent the form from submitting immediately
-        event.preventDefault();
-
-        // Clear previous client-side error messages
-        clientErrorMessageDiv.textContent = '';
-        usernameInput.style.borderColor = ''; // Reset border color
-        passwordInput.style.borderColor = ''; // Reset border color
-
-        // Hide server error if user starts correcting
-        const serverError = document.querySelector('.server-error');
-        if (serverError) serverError.style.display = 'none';
-
-
-        // Get current values
-        const username = usernameInput.value;
-        const password = passwordInput.value;
-
-        let errors = []; // Array to hold validation errors
-
-        // --- Validation Rules (Applying the specified format checks) ---
-
-        // 1. Username Validation (Letters and Digits only)
-        const usernameRegex = /^[a-zA-Z0-9]+$/;
-        if (!usernameRegex.test(username)) {
-            errors.push('Username format is invalid (only letters/digits allowed).');
-            usernameInput.style.borderColor = 'red';
-        }
-
-        // 2. Password Validation (Applying same rules as registration for consistency as requested)
-        // 2a. Length (at least 4 characters)
-        if (password.length < 4) {
-            errors.push('Password format is invalid (must be at least 4 characters).');
-            passwordInput.style.borderColor = 'red';
-        }
-
-        // 2b. Characters (Letters and Digits only)
-        const passwordCharsRegex = /^[a-zA-Z0-9]+$/;
-         // Only check character set if length is potentially valid, to avoid redundant message
-        if (password.length >= 4 && !passwordCharsRegex.test(password)) {
-             errors.push('Password format is invalid (only letters/digits allowed).');
-             passwordInput.style.borderColor = 'red';
-        }
-
-        // 2c. At least one letter
-        const hasLetterRegex = /[a-zA-Z]/;
-        if (!hasLetterRegex.test(password)) {
-            errors.push('Password format is invalid (must contain a letter).');
-             if (!passwordInput.style.borderColor) passwordInput.style.borderColor = 'red';
-        }
-
-        // 2d. At least one digit
-        const hasDigitRegex = /[0-9]/;
-        if (!hasDigitRegex.test(password)) {
-            errors.push('Password format is invalid (must contain a digit).');
-             if (!passwordInput.style.borderColor) passwordInput.style.borderColor = 'red';
-        }
-
-        // --- Decision ---
-
-        // If there are any format errors, display them and stop
-        if (errors.length > 0) {
-             // Use Set to remove duplicate messages if rules overlap in causing errors
-            const uniqueErrors = [...new Set(errors)];
-            clientErrorMessageDiv.innerHTML = uniqueErrors.join('<br>'); // Display errors
-        } else {
-            // If client-side format validation passes, submit the form
-            // The server will then handle the actual authentication check
-            loginForm.submit();
-        }
-    });
-</script>
-
+    <%- include('../partials/footer') %>
+    
+    <script src="/loginClient.js"></script>
 </body>
 </html>

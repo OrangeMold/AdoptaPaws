@@ -1,5 +1,5 @@
 const express = require('express');
-const session = require('express-session'); // Import express-session
+const session = require('express-session');
 const path = require('path');
 const fs = require('fs');
 
@@ -10,39 +10,124 @@ app.set('views', path.join(__dirname, 'views'));
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
-app.use(express.urlencoded({ extended: false })); // Add this to parse form data
+app.use(express.urlencoded({ extended: false }));
 
-// --- Session Configuration ---
 app.use(session({
-    secret: 'your-very-secret-key-change-this', // CHANGE THIS to a random, secure string
-    resave: false, // Don't save session if unmodified
-    saveUninitialized: false, // Don't create session until something stored
+    secret: 'super-secret-code', //:)
+    resave: false, 
+    saveUninitialized: false, 
     cookie: {
-        secure: false, // Set to true if using HTTPS
-        maxAge: 1000 * 60 * 60 * 24 // Optional: Cookie expiry (e.g., 1 day)
+        secure: false, 
+        maxAge: 1000 * 60 * 60 * 24 //so 1 day
     }
 }));
 
-// --- Authentication Middleware ---
-// This function checks if the user is logged in
 function requireAuth(req, res, next) {
     if (req.session.isAuthenticated) {
-        next(); // User is authenticated, proceed to the route
+        next();
     } else {
-        // Store the original URL they were trying to reach
         req.session.redirectTo = req.originalUrl;
-        res.redirect('/login'); // User not authenticated, redirect to login
+        res.redirect('/login'); //redirect to login
     }
 }
 
-// --- Routes ---
-app.get('/', (req, res) => {
-    res.render('pages/home', { username: req.session.username }); // Pass username if logged in
-});
+//parse data
+function parsePetLine(line) {
+    const parts = line.split(':');
+    if (parts.length < 12) return null; //line has enough parts
+    return {
+        id: parts[0],
+        username: parts[1],
+        type: parts[2], 
+        breed: parts[3], 
+        age: parts[4], 
+        gender: parts[5], 
+        getsAlongDogs: parts[6], 
+        getsAlongCats: parts[7], 
+        suitableForFamily: parts[8], 
+        comment: parts[9], 
+        ownerName: parts[10],
+        ownerEmail: parts[11] 
+    };
+}
 
 app.get('/browse', (req, res) => {
-    res.render('pages/browse', { username: req.session.username });
+    const searchCriteria = req.query; //get search params
+
+    fs.readFile(petsFilePath, 'utf-8', (err, data) => {
+        let allPets = [];
+        let filteredPets = [];
+
+        if (err && err.code !== 'ENOENT') {
+            console.error("Error reading pets file:", err);
+            return res.status(500).render('pages/browse', {
+                username: req.session.username,
+                pets: [], 
+                error: 'Could not load pet data.'
+            });
+        }
+
+        if (!err && data) { 
+            allPets = data.trim().split('\n')
+                .map(parsePetLine)
+                .filter(pet => pet !== null);
+        }
+
+        if (Object.keys(searchCriteria).length === 0) {
+            filteredPets = allPets;
+        } else {
+            filteredPets = allPets.filter(pet => {
+                let match = true; 
+
+                //check type
+                if (searchCriteria.type && pet.type.toLowerCase() !== searchCriteria.type.toLowerCase()) {
+                    match = false;
+                }
+                //check breed
+                if (match && searchCriteria.breed && !pet.breed.toLowerCase().includes(searchCriteria.breed.toLowerCase())) {
+                    match = false;
+                }
+                //check age
+                if (match && searchCriteria.age && pet.age !== searchCriteria.age) {
+                    match = false;
+                }
+                //check gender
+                if (match && searchCriteria.gender && pet.gender !== searchCriteria.gender) {
+                    match = false;
+                }
+
+                //check friendly
+                if (match && searchCriteria.friendly) {
+                    const friendlyCriteria = Array.isArray(searchCriteria.friendly) ? searchCriteria.friendly : [searchCriteria.friendly];
+
+                    if (friendlyCriteria.includes('dogs') && pet.getsAlongDogs !== 'yes') {
+                        match = false;
+                    }
+                    if (match && friendlyCriteria.includes('cats') && pet.getsAlongCats !== 'yes') {
+                        match = false;
+                    }
+                    if (match && friendlyCriteria.includes('smallChildren') && pet.suitableForFamily !== 'yes') {
+                        match = false;
+                    }
+                }
+
+                return match; 
+            });
+        }
+
+        res.render('pages/browse', {
+            username: req.session.username,
+            pets: filteredPets, 
+            error: null
+        });
+    });
 });
+
+app.get('/', (req, res) => {
+    res.render('pages/home', { username: req.session.username }); //pass username if logged in
+});
+
+
 
 app.get('/find', (req, res) => {
     res.render('pages/find', { username: req.session.username });
@@ -56,9 +141,8 @@ app.get('/cat-care', (req, res) => {
     res.render('pages/catCare', { username: req.session.username });
 });
 
-// Protect the /give-away route using the middleware
 app.get('/give-away', requireAuth, (req, res) => {
-    res.render('pages/giveAway', { username: req.session.username }); // Can now safely assume user is logged in
+    res.render('pages/giveAway', { username: req.session.username });
 });
 
 app.get('/contact', (req, res) => {
@@ -70,71 +154,60 @@ app.get('/privacy', (req, res) => {
 });
 
 app.get('/create-account', (req, res) => {
-    res.render('pages/createAccount');
+    res.render('pages/createAccount', { username: req.session.username });
 });
 
-// --- Login Routes ---
+
 app.get('/login', (req, res) => {
-    // If already logged in, maybe redirect to home or profile? Optional.
-    // if (req.session.isAuthenticated) {
-    //     return res.redirect('/');
-    // }
-    res.render('pages/login', { error: null }); // Pass null error initially
+    res.render('pages/login', { error: null });
 });
 
 const loginFilePath = path.join(__dirname, 'data', 'logins.txt');
-const petsFilePath = path.join(__dirname, 'data', 'pets.txt'); // Define path for pets data
+const petsFilePath = path.join(__dirname, 'data', 'pets.txt'); 
 
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
 
     fs.readFile(loginFilePath, 'utf-8', (err, data) => {
         if (err) {
-            console.error("Error reading logins file:", err);
-            // Render login page with a generic error
-            return res.status(500).render('pages/login', { error: 'Server error during login.' });
+            console.error("error reading logins file:", err);
+            return res.status(500).render('pages/login', { error: 'Server error during login..?' });
         }
 
-        const lines = data.split('\n').filter(line => line.trim() !== ''); // Read lines, ignore empty ones
+        const lines = data.split('\n').filter(line => line.trim() !== ''); //read lines, ignore empty ones
         let found = false;
 
         for (const line of lines) {
             const [storedUsername, storedPassword] = line.split(':');
             if (username === storedUsername && password === storedPassword) {
                 found = true;
-                break; // Exit loop once match is found
+                break; 
             }
         }
 
         if (found) {
-            // Authentication successful
             req.session.isAuthenticated = true;
-            req.session.username = username; // Store username in session
+            req.session.username = username;
 
-            // Redirect to the originally requested URL or default to '/'
-            const redirectTo = req.session.redirectTo || '/give-away'; // Default to giveAway if no specific page was requested
-            delete req.session.redirectTo; // Clear the stored redirect URL
+            const redirectTo = req.session.redirectTo || '/give-away'; 
+            delete req.session.redirectTo; 
             res.redirect(redirectTo);
         } else {
-            // Authentication failed
-            res.status(401).render('pages/login', { error: 'Invalid username or password.' });
+            //authentication failed
+            res.status(401).render('pages/login', { error: 'Invalid username or password ;(' });
         }
     });
 });
 
-// --- Logout Route ---
-app.get('/logout', (req, res) => {
-    const username = req.session.username; // Optional: Get username before destroying session if needed
 
-    // Destroy the session data
+app.get('/logout', (req, res) => {
+    const username = req.session.username;
+
+    //kill session data
     req.session.destroy((err) => {
         if (err) {
-            // Handle potential errors during session destruction
-            console.error("Error destroying session:", err);
-            // Maybe render an error page instead of just sending text
-            return res.status(500).send('Could not log out due to a server error.');
+            return res.status(500).send('server error can not log you out');
         }
-        // Render the logout confirmation page instead of redirecting
         res.render('pages/logoutConfirm');
     });
 });
@@ -143,7 +216,6 @@ app.get('/logout', (req, res) => {
 app.post('/register', (req, res) => {
     const { username, password } = req.body;
 
-    // Validate username and password format
     const isValidUsername = /^[a-zA-Z0-9]+$/.test(username);
     const isValidPassword =
         /^[a-zA-Z0-9]{4,}$/.test(password) &&
@@ -154,17 +226,14 @@ app.post('/register', (req, res) => {
         return res.status(400).send("Invalid username or password format.");
     }
 
-    // Read the file and check if username already exists
     fs.readFile(loginFilePath, 'utf-8', (err, data) => {
         if (err) return res.status(500).send('Server error reading file.');
 
-        // Check if the username already exists in the file
         const exists = data.split('\n').some(line => line.startsWith(username + ':'));
         if (exists) {
             return res.send("Username already exists. Please try another.");
         }
 
-        // If username doesn't exist, append the new account details
         fs.appendFile(loginFilePath, `${username}:${password}\n`, (err) => {
             if (err) return res.status(500).send('Error writing to file.');
             res.send("Account successfully created! You can now log in.");
@@ -172,22 +241,19 @@ app.post('/register', (req, res) => {
     });
 });
 
-// --- ***** NEW ROUTE TO HANDLE PET SUBMISSION ***** ---
-app.post('/submit-pet', requireAuth, (req, res) => {
-    const username = req.session.username; // Get username from session
-    const formData = req.body; // Form data is in req.body
 
-    // 1. Determine the next ID
+app.post('/submit-pet', requireAuth, (req, res) => {
+    const username = req.session.username; 
+    const formData = req.body; 
+
     fs.readFile(petsFilePath, 'utf-8', (err, data) => {
-        let nextId = 1; // Default to 1 if file doesn't exist or is empty
+        let nextId = 1; 
 
         if (err && err.code !== 'ENOENT') {
-            // Handle errors other than file not found
-            console.error("Error reading pets file:", err);
-            return res.status(500).send("Error processing pet submission.");
+            return res.status(500).send("error processing pet submission");
         }
 
-        if (!err && data) { // If file exists and has content
+        if (!err && data) { 
             const lines = data.trim().split('\n');
             if (lines.length > 0) {
                 const lastLine = lines[lines.length - 1];
@@ -196,16 +262,12 @@ app.post('/submit-pet', requireAuth, (req, res) => {
                 if (!isNaN(lastId)) {
                     nextId = lastId + 1;
                 } else {
-                    // Fallback if the last line's ID is somehow not a number
-                    // You might want more robust error handling here
-                    console.warn(`Could not parse ID from last line: "${lastLine}". Using next sequential ID based on line count.`);
-                     nextId = lines.length + 1; // Alternative fallback
+                    console.warn(`Could not parse ID from last line: "${lastLine}". Using next ID (based on line count)`);
+                     nextId = lines.length + 1; 
                 }
             }
         }
 
-        // 2. Format the data string
-        // Use bracket notation for keys with hyphens
         const petDataString = [
             nextId,
             username,
@@ -216,29 +278,24 @@ app.post('/submit-pet', requireAuth, (req, res) => {
             formData['gets-along-dogs'],
             formData['gets-along-cats'],
             formData['suitable-for-family'],
-            formData.comment.replace(/\n/g, ' '), // Replace newlines in comment to keep one line per pet
+            formData.comment.replace(/\n/g, ' '), 
             formData['owner-name'],
             formData['owner-email']
-        ].join(':'); // Join all parts with a colon
+        ].join(':'); 
 
-        // 3. Append data to pets.txt
         fs.appendFile(petsFilePath, petDataString + '\n', (appendErr) => {
             if (appendErr) {
-                console.error("Error appending to pets file:", appendErr);
-                return res.status(500).send("Error saving pet details.");
+                console.error("eror appending to pets file:", appendErr);
+                return res.status(500).send("Error saving pet details:(");
             }
 
-            // 4. Send a response (e.g., redirect or success message)
             console.log(`Pet data saved: ${petDataString}`);
-            // Redirect to the browse page after successful submission
             res.redirect('/browse?status=success');
-            // Or send a success message:
-            // res.send("Pet information submitted successfully!");
         });
     });
 });
 
-// Start server
+//start server
 app.listen(3000, () => {
     console.log('Server running on http://localhost:3000');
 });

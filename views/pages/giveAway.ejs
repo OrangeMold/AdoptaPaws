@@ -13,16 +13,19 @@
         <nav>
             <ul>
                 <li><a href="/">Home</a></li>
-                <li><a href="/create-account">Create Account</a></li>
                 <li><a href="/browse">Browse Available Pets</a></li>
                 <li><a href="/find">Find a Dog/Cat</a></li>
                 <li><a href="/dog-care">Dog Care</a></li>
                 <li><a href="/cat-care">Cat Care</a></li>
                 <li><a href="/give-away">Have a Pet to Give Away</a></li>
                 <li><a href="/contact">Contact Us</a></li>
-                <li><a href="/logout">Logout</a></li>
+                <li><a href="/create-account">Create Account</a></li>
+                <% if (typeof username !== 'undefined' && username) { %>
+                    <li><a href="/logout">Logout (<%= username %>)</a></li>
+                <% } else { %>
+                    <li><a href="/login">Login</a></li>
+                <% } %>
             </ul>
-            
         </nav>
         
         <div class="main-container" id="forum-page">

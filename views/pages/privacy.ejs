@@ -13,15 +13,19 @@
         <nav>
             <ul>
                 <li><a href="/">Home</a></li>
-                <li><a href="/create-account">Create Account</a></li>
                 <li><a href="/browse">Browse Available Pets</a></li>
                 <li><a href="/find">Find a Dog/Cat</a></li>
                 <li><a href="/dog-care">Dog Care</a></li>
                 <li><a href="/cat-care">Cat Care</a></li>
                 <li><a href="/give-away">Have a Pet to Give Away</a></li>
                 <li><a href="/contact">Contact Us</a></li>
+                <li><a href="/create-account">Create Account</a></li>
+                <% if (typeof username !== 'undefined' && username) { %>
+                    <li><a href="/logout">Logout (<%= username %>)</a></li>
+                <% } else { %>
+                    <li><a href="/login">Login</a></li>
+                <% } %>
             </ul>
-            
         </nav>
         
         <div class="main-container">
@@ -32,6 +36,7 @@
                 
                 <p>Your information will not be sold or misued.</p>
                 <p>Logo image <em><a href="https://www.freepik.com/free-vector/pet-lover-logo-design_59982833.htm#fromView=keyword&page=1&position=3&uuid=57862177-9802-45d5-bcb0-019714cd8a60&query=Heart+Paw+Print+Clipart" target="_blank">source</a></em></p>
+                <p>Pet images <em><a href="https://www.vecteezy.com/photo/2098204-silver-tabby-cat-sitting-on-green-background" target="_blank">source</a></em></p>
             </div>
         </div>
     </div>

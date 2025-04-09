@@ -2,83 +2,94 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>AdoptaPaws - Home</title>
+    <title>AdoptaPaws - Browse Pets</title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <%- include('../partials/header') %>
 
-    
     <div class="page-content">
         <nav>
             <ul>
                 <li><a href="/">Home</a></li>
-                <li><a href="/create-account">Create Account</a></li>
                 <li><a href="/browse">Browse Available Pets</a></li>
                 <li><a href="/find">Find a Dog/Cat</a></li>
                 <li><a href="/dog-care">Dog Care</a></li>
                 <li><a href="/cat-care">Cat Care</a></li>
                 <li><a href="/give-away">Have a Pet to Give Away</a></li>
                 <li><a href="/contact">Contact Us</a></li>
+                <li><a href="/create-account">Create Account</a></li>
+                <% if (typeof username !== 'undefined' && username) { %>
+                    <li><a href="/logout">Logout (<%= username %>)</a></li>
+                <% } else { %>
+                    <li><a href="/login">Login</a></li>
+                <% } %>
             </ul>
-            
         </nav>
-        
+
         <div class="main-container">
-            <h1 class="page-title">Browse Available Pets</h1>
-            
-            <div class="pet-listings">
-                <div class="pet-card">
-                    <img src="Max.jpg" alt="Max img" class="pet-image">
-                    <div class="pet-info">
-                        <h2 class="pet-name">Max</h2>
-                        <div class="pet-details">
-                            <p><span class="pet-detail-label">Type:</span> Dog</p>
-                            <p><span class="pet-detail-label">Breed:</span> Golden Retriever</p>
-                            <p><span class="pet-detail-label">Gender:</span> Male</p>
-                            <p><span class="pet-detail-label">Age:</span> 3 years</p>
-                            <p><span class="pet-detail-label">Gets along with:</span> dogs, cats</p>
-                            <p><span class="pet-detail-label">Current Owner:</span> Alex Genest, agenest@gmail.com</p>
+            <h1 class="page-title">Available Pets</h1>
+
+            <% if (typeof error !== 'undefined' && error) { %>
+                <p class="error-message"><%= error %></p>
+            <% } %>
+
+            <%#display msg if no pets match or file is empty %>
+            <% if (typeof pets === 'undefined' || pets.length === 0) { %>
+                <p>No pets found matching your criteria, or no pets available at this time.</p>
+            <% } else { %>
+                <div class="pet-listings">
+                    <% pets.forEach(pet => { %>
+                        <%
+                            let imageSrc = '/images/placeholder.jpg';
+                            const petIdStr = String(pet.id || '0');
+                            const petIdNum = parseInt(petIdStr, 10);
+
+                            if (!isNaN(petIdNum) && pet.type) {
+                                const typeLower = pet.type.toLowerCase();
+                                if (typeLower === 'dog' || typeLower === 'cat') {
+                                    //calculate image num using mod
+                                    const imageNum = ((petIdNum - 1) % 3) + 1;
+                                    imageSrc = `/${typeLower}${imageNum}.jpg`;
+                                }
+                            }
+                        %>
+
+                        <div class="pet-card">
+                             <img src="<%= imageSrc %>" alt="<%= pet.breed %> <%= pet.type %> (ID: <%= pet.id %>)" class="pet-image">
+                            <div class="pet-info">
+                                <h2 class="pet-name"><%= pet.breed %> <%= pet.type %></h2>
+                                <div class="pet-details">
+                                    <p><span class="pet-detail-label">ID:</span> <%= pet.id %></p>
+                                    <p><span class="pet-detail-label">Type:</span> <%= pet.type %></p>
+                                    <p><span class="pet-detail-label">Breed:</span> <%= pet.breed %></p>
+                                    <p><span class="pet-detail-label">Gender:</span> <%= pet.gender %></p>
+                                    <p><span class="pet-detail-label">Age:</span> <%= pet.age %></p>
+                                    <%
+                                        let friendlyWith = [];
+                                        // Use the lowercase standardized values from parsing
+                                        if (pet.getsAlongDogs === 'yes') friendlyWith.push('dogs');
+                                        if (pet.getsAlongCats === 'yes') friendlyWith.push('cats');
+                                        if (pet.suitableForFamily === 'yes') friendlyWith.push('children');
+                                    %>
+                                    <% if (friendlyWith.length > 0) { %>
+                                        <p><span class="pet-detail-label">Gets along with:</span> <%= friendlyWith.join(', ') %></p>
+                                    <% } else { %>
+                                        <%# <p><span class="pet-detail-label">Gets along with:</span> (Not specified)</p> %>
+                                     <% } %>
+                                    <p><span class="pet-detail-label">Owner:</span> <%= pet.ownerName %> (<a href="mailto:<%= pet.ownerEmail %>" title="Click to email owner"><%= pet.ownerEmail %></a>)</p>
+                                    <p><span class="pet-detail-label">Listed by:</span> <%= pet.username %></p>
+                                </div>
+                                <% if (pet.comment && pet.comment.toLowerCase() !== 'na' && pet.comment.trim() !== '') { %>
+                                    <p class="pet-comment-label">Owner's Comment:</p>
+                                    <p class="pet-comment"><%= pet.comment %></p>
+                                <% } %>
+                                <button class="interested-btn" onclick="alert('Interested in Pet ID <%= pet.id %>? Contact <%= pet.ownerName %> at <%= pet.ownerEmail %>.')">I'm Interested!</button>
+                            </div>
                         </div>
-                        <p>Max is curious and energetic, always on the lookout for for a ball to play with.</p>
-                        <button class="interested-btn">Interested</button>
-                    </div>
+                    <% }) %>
                 </div>
-                
-                <div class="pet-card">
-                    <img src="Luna.jpg" alt="Luna img" class="pet-image">
-                    <div class="pet-info">
-                        <h2 class="pet-name">Luna</h2>
-                        <div class="pet-details">
-                            <p><span class="pet-detail-label">Type:</span> Dog</p>
-                            <p><span class="pet-detail-label">Breed:</span> Black Labrador</p>
-                            <p><span class="pet-detail-label">Gender:</span> Female</p>
-                            <p><span class="pet-detail-label">Age:</span> 2 years</p>
-                            <p><span class="pet-detail-label">Gets along with:</span> dogs, cats, children</p>
-                            <p><span class="pet-detail-label">Current Owner:</span> Kate Denis, kdenis@gmail.com</p>
-                        </div>
-                        <p>Luna is used to the outdoors and looking for a home</p>
-                        <button class="interested-btn">Interested</button>
-                    </div>
-                </div>
-                
-                <div class="pet-card">
-                    <img src="Charlie.jpg" alt="Charlie img" class="pet-image">
-                    <div class="pet-info">
-                        <h2 class="pet-name">Charlie</h2>
-                        <div class="pet-details">
-                            <p><span class="pet-detail-label">Type:</span> Dog</p>
-                            <p><span class="pet-detail-label">Breed:</span> Beagle Mix</p>
-                            <p><span class="pet-detail-label">Gender:</span> Male</p>
-                            <p><span class="pet-detail-label">Age:</span> 5 years</p>
-                            <p><span class="pet-detail-label">Gets along with:</span> children</p>
-                            <p><span class="pet-detail-label">Current Owner:</span> Rachel Queens, rqueens@gmail.com</p>
-                        </div>
-                        <p>Charlie is very gentle and LOVES walks</p>
-                        <button class="interested-btn">Interested</button>
-                    </div>
-                </div>
-            </div>
+            <% } %> 
         </div>
     </div>
 

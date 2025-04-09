@@ -19,12 +19,12 @@ const form = document.getElementById('register-form');
       const password = form.password.value;
 
       if (!isValidUsername(username)) {
-        responseMsg.textContent = "Username must contain only letters and digits.";
+        responseMsg.textContent = "Username must contain only letters and digits";
         return;
       }
 
       if (!isValidPassword(password)) {
-        responseMsg.textContent = "Password must be at least 4 characters long, and include at least one letter and one digit.";
+        responseMsg.textContent = "Password must be at least 4 characters long, and include at least one letter and one digit";
         return;
       }
 
