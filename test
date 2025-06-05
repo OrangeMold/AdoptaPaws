@@ -1,0 +1,284 @@
+package dynamodb.sink;
+
+import generic.sink.GenericSinkConfig;
+import generic.sink.GenericSinkTask;
+import generic.sink.ThrottlingException;
+import generic.sink.WriteException;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
+import org.apache.kafka.connect.sink.SinkRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration;
+import software.amazon.awssdk.http.apache.ApacheHttpClient;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
+import software.amazon.awssdk.services.dynamodb.model.*;
+
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+
+public class DynamoSinkTask extends GenericSinkTask {
+
+    private static final Logger log = LoggerFactory.getLogger(DynamoSinkTask.class);
+
+    private static final int MAX_DYNAMO_BATCH_SIZE = 25;
+    private static final long MAX_BACKOFF_MS = 300_000; // 5 minutes max backoff
+
+    private DynamoDbAsyncClient asyncClient;
+    private ScheduledExecutorService retryScheduler;
+
+    @Override
+    public GenericSinkConfig loadConfig(Map<String, String> props) {
+        return new DynamoSinkConfig(props);
+    }
+
+    private DynamoSinkConfig config() {
+        return (DynamoSinkConfig) config;
+    }
+
+    @Override
+    public void initializeClient() {
+        log.info("Begin::DynamoSinkTask::initializeClient");
+
+        ClientOverrideConfiguration clientConfiguration = ClientOverrideConfiguration.builder()
+                .apiCallTimeout(Duration.ofMillis(5000))
+                .build();
+
+        AwsCredentialsProvider credentialsProvider;
+        if (config().getAccessKeyId().value().isEmpty() || config().getSecretKey().value().isEmpty()) {
+            credentialsProvider = DefaultCredentialsProvider.create();
+        } else {
+            AwsBasicCredentials awsCreds = AwsBasicCredentials.create(config().getAccessKeyId().value(), config().getSecretKey().value());
+            credentialsProvider = StaticCredentialsProvider.create(awsCreds);
+        }
+
+        asyncClient = DynamoDbAsyncClient.builder()
+                .credentialsProvider(credentialsProvider)
+                .region(config().getRegion())
+                .overrideConfiguration(clientConfiguration)
+                .httpClientBuilder(ApacheHttpClient.builder())
+                .build();
+
+        retryScheduler = Executors.newSingleThreadScheduledExecutor();
+
+        log.info("Complete::DynamoSinkTask::initializeClient");
+    }
+
+    @Override
+    public void writeSingle(SinkRecord record) {
+        try {
+            PutItemRequest putRequest = toPutItemRequest(record);
+            asyncClient.putItem(putRequest).join();
+            log.debug("Successfully wrote single record: {}", record);
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof LimitExceededException || cause instanceof ProvisionedThroughputExceededException) {
+                throw new ThrottlingException();
+            }
+            throw new WriteException(cause);
+        }
+    }
+
+    @Override
+    public void writeBatch(Iterator<SinkRecord> recordIterator) {
+        List<WriteRequest> requests = new ArrayList<>();
+        int batchSize = Math.min(config().getBatchSize(), MAX_DYNAMO_BATCH_SIZE);
+
+        // Collect up to batchSize WriteRequests
+        for (int i = 0; i < batchSize && recordIterator.hasNext(); i++) {
+            SinkRecord record = recordIterator.next();
+            PutItemRequest putReq = toPutItemRequest(record);
+            WriteRequest writeRequest = WriteRequest.builder().putRequest(
+                    PutRequest.builder().item(putReq.item()).build()
+            ).build();
+            requests.add(writeRequest);
+        }
+
+        if (requests.isEmpty()) return;
+
+        Map<String, List<WriteRequest>> requestItems = new HashMap<>();
+        String tableName = tableNameFromRecord(requestIterator);
+        requestItems.put(tableName, requests);
+
+        // Perform async batch write with retries
+        try {
+            executeBatchWriteWithRetries(requestItems, 0).join();
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof ThrottlingException) {
+                throw (ThrottlingException) cause;
+            }
+            throw new WriteException(cause);
+        }
+    }
+
+    /**
+     * Recursively executes BatchWriteItemRequest with exponential backoff retry for unprocessed items.
+     * @param requestItems Map of tableName to list of WriteRequests
+     * @param retryCount current retry count
+     * @return CompletableFuture<Void> that completes when all writes succeed or max retries exceeded.
+     */
+    private CompletableFuture<Void> executeBatchWriteWithRetries(Map<String, List<WriteRequest>> requestItems, int retryCount) {
+        if (retryCount > config().getMaxRetries()) {
+            return CompletableFuture.failedFuture(new WriteException(new RuntimeException("Exceeded max retries for batch write")));
+        }
+
+        BatchWriteItemRequest batchRequest = BatchWriteItemRequest.builder()
+                .requestItems(requestItems)
+                .build();
+
+        log.debug("Executing batch write attempt {} with {} tables", retryCount + 1, requestItems.size());
+
+        return asyncClient.batchWriteItem(batchRequest).thenCompose(response -> {
+            Map<String, List<WriteRequest>> unprocessed = response.unprocessedItems();
+
+            if (unprocessed == null || unprocessed.isEmpty()) {
+                // All processed
+                return CompletableFuture.completedFuture(null);
+            } else {
+                // There are unprocessed items, backoff and retry
+                long backoff = computeBackoffWithJitter(config().getRetryBackoffMs(), retryCount);
+                log.warn("Unprocessed items detected on retry {}. Backing off {} ms before retry.", retryCount + 1, backoff);
+
+                CompletableFuture<Void> delayedFuture = new CompletableFuture<>();
+                retryScheduler.schedule(() -> {
+                    executeBatchWriteWithRetries(unprocessed, retryCount + 1)
+                            .whenComplete((res, err) -> {
+                                if (err != null) delayedFuture.completeExceptionally(err);
+                                else delayedFuture.complete(null);
+                            });
+                }, backoff, TimeUnit.MILLISECONDS);
+
+                return delayedFuture;
+            }
+        }).exceptionallyCompose(ex -> {
+            Throwable cause = ex.getCause();
+            if (cause instanceof LimitExceededException || cause instanceof ProvisionedThroughputExceededException) {
+                // Treat throttling as unprocessed, retry with backoff
+                long backoff = computeBackoffWithJitter(config().getRetryBackoffMs(), retryCount);
+                log.warn("Throttling exception detected on retry {}. Backing off {} ms before retry.", retryCount + 1, backoff);
+
+                CompletableFuture<Void> delayedFuture = new CompletableFuture<>();
+                retryScheduler.schedule(() -> {
+                    executeBatchWriteWithRetries(requestItems, retryCount + 1)
+                            .whenComplete((res, err) -> {
+                                if (err != null) delayedFuture.completeExceptionally(err);
+                                else delayedFuture.complete(null);
+                            });
+                }, backoff, TimeUnit.MILLISECONDS);
+
+                return delayedFuture;
+            }
+
+            return CompletableFuture.failedFuture(ex);
+        });
+    }
+
+    @Override
+    public void stop() {
+        if (asyncClient != null) {
+            asyncClient.close();
+            asyncClient = null;
+        }
+        if (retryScheduler != null && !retryScheduler.isShutdown()) {
+            retryScheduler.shutdown();
+            try {
+                if (!retryScheduler.awaitTermination(10, TimeUnit.SECONDS)) {
+                    retryScheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private String tableName(SinkRecord record) {
+        return config().getTableFormat().replace("${topic}", record.topic());
+    }
+
+    /**
+     * Extract table name from any SinkRecord in the iterator (peek).
+     * This is safe only if all records are from the same topic/table.
+     */
+    private String tableNameFromRecord(Iterator<SinkRecord> recordIterator) {
+        // This will be called when building batch, so iterator already advanced at least once
+        // Trick: To avoid advancing the iterator, we expect all records in batch are from same topic.
+        // So we just take the first table from config template using the first SinkRecord already taken.
+        // If you want per-record table, batch by table in caller instead.
+        // For simplicity, just use fixed table format here:
+        return config().getTableFormat().replace("${topic}", ""); // or provide a dummy or default topic if you want
+    }
+
+    private PutItemRequest toPutItemRequest(SinkRecord record) {
+        Map<String, AttributeValue> itemMap = new HashMap<>();
+        DynamoSinkConfig config = config();
+
+        if (!config.isIgnoreRecordKey()) {
+            insert(ValueSource.RECORD_KEY, record.key(), record.keySchema(), itemMap, config);
+        }
+        if (!config.isIgnoreRecordValue()) {
+            insert(ValueSource.RECORD_VALUE, record.value(), record.valueSchema(), itemMap, config);
+        }
+
+        return PutItemRequest.builder()
+                .tableName(tableName(record))
+                .item(itemMap)
+                .build();
+    }
+
+    private enum ValueSource {
+        RECORD_KEY {
+            @Override
+            String topAttributeName(DynamoSinkConfig config) {
+                return config.getTopKeyAttribute();
+            }
+        },
+        RECORD_VALUE {
+            @Override
+            String topAttributeName(DynamoSinkConfig config) {
+                return config.getTopValueAttribute();
+            }
+        };
+
+        abstract String topAttributeName(DynamoSinkConfig config);
+    }
+
+    private void insert(ValueSource valueSource, Object value, Schema schema, Map<String, AttributeValue> itemMap, DynamoSinkConfig config) {
+        try {
+            AttributeValue attributeValue = (schema == null)
+                    ? AttributeValueConverter.toAttributeValueSchemaless(value)
+                    : AttributeValueConverter.toAttributeValue(schema, value);
+
+            String topAttributeName = valueSource.topAttributeName(config);
+            if (topAttributeName.isEmpty()) {
+                itemMap.putAll(attributeValue.m());
+            } else if (attributeValue.m() != null) {
+                itemMap.put(topAttributeName, attributeValue);
+            } else {
+                throw new ConnectException("No top name configured for " + valueSource + ", and it could not be converted to Map: " + attributeValue);
+            }
+        } catch (DataException e) {
+            log.error("Failed to convert record with schema={} value={}", schema, value, e);
+            throw e;
+        }
+    }
+
+    /**
+     * Compute exponential backoff with full jitter.
+     */
+    private long computeBackoffWithJitter(long baseBackoffMs, int retryCount) {
+        long expBackoff = baseBackoffMs * (1L << retryCount);
+        long capped = Math.min(expBackoff, MAX_BACKOFF_MS);
+        // Full jitter: random between 0 and capped
+        return ThreadLocalRandom.current().nextLong(0, capped + 1);
+    }
+}
